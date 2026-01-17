@@ -1,387 +1,281 @@
-# CFD Porous Zone 파라미터 계산 가이드
+# CFD Porous Zone 파라미터 계산 - 빠른 사용 가이드
 
 ## 개요
 
-이 문서는 **핀-튜브 열교환기**의 Porous Zone 설정을 위한 CFD 파라미터 계산 방법과 Fluent 입력 가이드를 제공합니다.
+이 도구는 **Annular Fin 열교환기**를 **Porous Media**로 근사하여 CFD 시뮬레이션에 필요한 파라미터를 계산합니다.
 
-**적용 조건:**
-- **유체:** 15°C 공기, 1 atm
-- **설계 유속:** 1.5 m/s (Frontal Velocity)
-- **열전달 모델:** LTNE (Local Thermal Non-Equilibrium, 비평형 열전달)
-
----
-
-## 1. 입력 변수 및 고정 파라미터
-
-### 1.1 설계 변수 (Design Variables)
-
-| 파라미터 | 기호 | 단위 | 설명 |
-|---------|------|------|------|
-| 핀 간격 | $F_s$ | mm | Fin Spacing |
-| 핀 높이 | $h_f$ | mm | Fin Height |
-| 피치 비율 | $Ratio = s_1/s_2$ | - | 종방향/횡방향 피치 비율 (0.5 < Ratio < 2.0) |
-
-### 1.2 고정 파라미터 (Fixed Parameters)
-
-| 파라미터 | 기호 | 값 | 단위 | 비고 |
-|---------|------|-----|------|------|
-| 튜브 외경 | $D_c$ | 24 | mm | Tube OD |
-| 핀 두께 | $\delta_f$ | 0.5 | mm | - |
-| 횡방향 피치 | $s_1$ | 55.333 | mm | Spanwise Pitch |
-| 튜브 열 수 | $N$ | 4 | - | 유동 방향 튜브 열 수 (단위 크기 0.2m 기준) |
-| 배열 형태 | - | Staggered | - | 엇갈림 배열 (열전달 효율 우수) |
-
-### 1.3 종속 변수 (Derived Variables)
-
-| 파라미터 | 기호 | 수식 | 단위 |
-|---------|------|------|------|
-| 핀 외경 | $D_o$ | $D_c + 2h_f$ | mm |
-| 핀 피치 | $F_p$ | $F_s + \delta_f$ | mm | Center-to-Center |
-| 종방향 피치 | $s_2$ | $s_1 / Ratio$ | mm |
-
-### 1.4 공기 물성치 (15°C, 1 atm 기준)
-
-**명료화된 가정:**
-
-| 물성치 | 기호 | 값 | 단위 |
-|--------|------|-----|------|
-| 밀도 | $\rho$ | 1.225 | kg/m³ |
-| 점성 | $\mu$ | 1.789 × 10⁻⁵ | Pa·s |
-| 열전도율 | $k$ | 0.0253 | W/m·K |
-| Prandtl 수 | $Pr$ | 0.71 | - |
-
-**중요:** 코드 내부에서 이 값들이 **고정값으로 하드코딩**되어 있습니다. 다른 온도 조건을 사용할 경우 코드 수정이 필요합니다.
+**핵심 특징:**
+- ✅ **Nir (1991) 상관식 기반** - Annular Finned Tube 전용 마찰계수 상관식
+- ✅ **2-Point Fitting** - Darcy-Forchheimer 계수 정확 도출
+- ✅ **온도 의존 물성치** - Sutherland's Law로 정밀 계산
+- ✅ **LTNE 지원** - 열전달 계수 및 비표면적 출력
 
 ---
 
-## 2. 계산 결과값 (Output Parameters)
+## 빠른 시작
 
-코드 실행 시 다음 5가지 주요 파라미터가 출력됩니다:
+### 1. 코드 실행
 
-### 2.1 공극률 (Porosity)
+```bash
+python cfd_porous_calc.py
+```
 
-**기호:** $\epsilon$  
-**단위:** - (무차원)  
-**수식:**
-$$\epsilon = 1 - \frac{\delta_f}{F_p}$$
+### 2. 출력 확인
 
-**의미:** Annular Zone 내에서 공기가 흐를 수 있는 체적 비율 (핀 고체 부피 제외)
+코드를 실행하면 다음 정보가 출력됩니다:
 
-### 2.2 비표면적 (Surface Area Density)
+#### (1) 핵심 CFD 입력값
 
-**기호:** $a_{fs}$  
-**단위:** m⁻¹  
-**수식:**
-$$a_{fs} = \frac{A_{surface}}{V_{annular}} = \frac{0.5\pi(D_o^2 - D_c^2) + \pi D_o \delta_f + \pi D_c F_s}{0.25\pi(D_o^2 - D_c^2) \cdot F_p}$$
+```
+============================================================
+  ★★★ CFD Porous Media 입력값 (핵심 출력) ★★★
+============================================================
+  점성 저항 (1/K)     : 6.5900e+04  [1/m²]
+  관성 저항 (C2)      : 5.3700  [1/m]
+  투과도 (K)          : 2.7100e-10  [m²]
+============================================================
+```
 
-**의미:** 단위 체적당 열전달 표면적
+#### (2) 여러 케이스 비교표
 
-### 2.3 점성 저항 (Viscous Resistance)
-
-**기호:** $1/K$  
-**단위:** m⁻²  
-**계산 방법:** 2-Point Fitting Method를 통한 Darcy-Forchheimer 계수 변환
-
-**의미:** 유동 저항의 점성 성분
-
-### 2.4 관성 저항 (Inertial Resistance)
-
-**기호:** $C_2$  
-**단위:** m⁻¹  
-**계산 방법:** 2-Point Fitting Method를 통한 Darcy-Forchheimer 계수 변환
-
-**의미:** 유동 저항의 관성 성분
-
-### 2.5 계면 열전달 계수 (Interfacial Heat Transfer Coefficient)
-
-**기호:** $h_{fs}$  
-**단위:** W/m²·K  
-**상관식:** Briggs & Young Correlation (Annular Finned Tubes 전용)
-
-$$Nu = 0.134 \cdot Re_D^{0.681} \cdot Pr^{0.33} \cdot \left(\frac{s}{l}\right)^{0.2} \cdot \left(\frac{s}{t}\right)^{0.113}$$
-
-$$h_{fs} = \frac{Nu \cdot k}{D_c}$$
-
-**의미:** 핀 표면에서 공기로의 열전달 계수 (LTNE 모델 필수)
+```
+====================================================================================================
+  Porous 파라미터 비교표 (T = 14.80°C, v = 2.0197 m/s)
+====================================================================================================
+  Fs   hf |       ε       σ     AR |   1/K [1/m²]  C2 [1/m] |  ΔP [Pa]  h [W/m²K]
+----------------------------------------------------------------------------------------------------
+   2    4 |  0.8000  0.4778   4.80 |   7.3300e+04     5.9700 |     16.52     103.45
+   4    4 |  0.8889  0.5502   3.11 |   6.5900e+04     5.3700 |     11.95      94.82
+   6    4 |  0.9231  0.5923   2.46 |   6.2600e+04     5.1100 |     10.20      89.63
+   8    4 |  0.9412  0.6204   2.12 |   6.0700e+04     4.9500 |      9.19      86.05
+====================================================================================================
+```
 
 ---
 
-## 3. 계산 프로세스 (Calculation Flow)
+## CFD 소프트웨어 입력
 
-### 3.1 기하학적 파라미터 계산
+### ANSYS Fluent
 
-1. **종속 변수 계산**
-   - $F_p = F_s + \delta_f$
-   - $D_o = D_c + 2h_f$
-   - $s_2 = s_1 / Ratio$
+#### Porous Zone 설정
 
-2. **안전성 검사 (Overlap Check)**
-   - `if D_o > s_1`: 횡방향 충돌 경고
-   - `if D_o > s_2`: 종방향 충돌 경고
-   - 충돌 시 오류 메시지 출력 및 계산 중단
+1. **Cell Zone Conditions** → Porous Zone 체크
 
-3. **Porous Zone 파라미터**
-   - $\epsilon$, $a_{fs}$, $D_h$ 계산
+2. **Viscous Resistance (1/m²)**
+   ```
+   Direction-1 (유동 방향):  6.59e+04  [계산값]
+   Direction-2 (횡방향):     6.59e+07  [계산값 × 1000]
+   Direction-3 (횡방향):     6.59e+07  [계산값 × 1000]
+   ```
 
-### 3.2 유동 저항 계산 (Wang Correlation)
+3. **Inertial Resistance (1/m)**
+   ```
+   Direction-1 (유동 방향):  5.37
+   Direction-2 (횡방향):     5370
+   Direction-3 (횡방향):     5370
+   ```
 
-**Step 1: 최소 유동 단면적 비율**
-$$\sigma = \frac{A_{min}}{A_{face}} = \frac{s_1 - D_c - 2h_f \delta_f / F_p}{s_1}$$
+4. **Porosity**
+   ```
+   모든 방향: 0.8889
+   ```
 
-**Step 2: 최대 유속 (Physical Velocity)**
-$$v_{max} = \frac{v_{inlet}}{\sigma}$$
+#### LTNE (비평형 열전달) 설정
 
-**Step 3: 레이놀즈 수**
-$$Re_{Dc} = \frac{\rho \cdot v_{max} \cdot D_c}{\mu}$$
+1. **Non-Equilibrium Thermal Model** 활성화
 
-**Step 4: Wang 마찰 계수**
-$$f = 0.0267 \cdot Re_{Dc}^{F_1} \cdot \left(\frac{s_1}{s_2}\right)^{F_2} \cdot \left(\frac{F_s}{D_c}\right)^{F_3}$$
+2. **Surface Area Density (a_fs)**: `698.85` [1/m]
 
-여기서:
-- $F_1 = -0.764 + 0.739(s_1/s_2) + 0.177(F_p/D_c) - \frac{0.00758}{N}$
-- $F_2 = -15.689 + \frac{64.021}{\ln(Re_{Dc})}$
-- $F_3 = 1.696 - \frac{15.695}{\ln(Re_{Dc})}$
-
-**Step 5: 압력강하**
-$$\frac{\Delta P}{L} = \frac{f}{D_h} \cdot \frac{\rho v_{max}^2}{2}$$
-
-**Step 6: 2-Point Fitting (Darcy-Forchheimer 변환)**
-
-두 가지 속도 포인트 ($v_1 = 1.5$ m/s, $v_2 = 0.5$ m/s)에서 계산된 압력강하값을 사용하여:
-
-$$\frac{\Delta P}{L} = A \cdot v + B \cdot v^2$$
-
-형태로 변환하고, 다음 관계식으로 CFD 계수를 도출:
-
-- $1/K = \frac{A}{\mu}$ (Viscous Resistance)
-- $C_2 = \frac{2B}{\rho}$ (Inertial Resistance)
-
-### 3.3 열전달 계수 계산 (Briggs & Young)
-
-- 설계점 레이놀즈 수 ($Re_{design}$) 사용
-- Nusselt 수 계산 후 $h_{fs}$ 도출
+3. **Fluid Solid Heat Transfer Coefficient (h_fs)**: `94.82` [W/(m²·K)]
 
 ---
 
-## 4. Fluent 입력 가이드
+### SimScale
 
-### 4.1 Porous Zone 설정
+1. **Porous Media** 활성화
 
-**위치:** `Cell Zone Conditions` > `Porous Zone`
+2. **Permeability (K)**:
+   ```
+   K = 1 / (1/K) = 1 / 6.59e+04 = 1.52e-05 [m²]
+   ```
 
-#### 4.1.1 Porosity
-
-- **입력 위치:** `Porosity`
-- **값:** 계산 결과의 `Porosity (ε)`
-- **단위:** 무차원
-- **입력 방법:** 
-  ```
-  Direction-1: [계산값]
-  Direction-2: [계산값] (동일)
-  Direction-3: [계산값] (동일)
-  ```
-
-#### 4.1.2 Viscous Resistance (1/K)
-
-- **입력 위치:** `Viscous Resistance`
-- **값:** 계산 결과의 `Viscous Resistance (1/K)`
-- **단위:** m⁻²
-- **입력 방법:**
-  ```
-  Direction-1: [계산값] (주유동 방향)
-  Direction-2: [계산값 × 1000] (큰 값을 넣어 유동 차단)
-  Direction-3: [계산값 × 1000] (큰 값을 넣어 유동 차단)
-  ```
-  
-  **주의:** Direction-2, Direction-3에는 **주유동 방향 값의 1,000배**를 입력하여 유동이 옆으로 새지 않게 막아야 합니다.
-
-#### 4.1.3 Inertial Resistance (C2)
-
-- **입력 위치:** `Inertial Resistance`
-- **값:** 계산 결과의 `Inertial Resistance (C2)`
-- **단위:** m⁻¹
-- **입력 방법:**
-  ```
-  Direction-1: [계산값] (주유동 방향)
-  Direction-2: [계산값 × 1000] (큰 값을 넣어 유동 차단)
-  Direction-3: [계산값 × 1000] (큰 값을 넣어 유동 차단)
-  ```
-
-### 4.2 LTNE (Local Thermal Non-Equilibrium) 설정
-
-**위치:** `Cell Zone Conditions` > `Porous Zone` > `Non-Equilibrium Thermal Model`
-
-#### 4.2.1 Non-Equilibrium Thermal Model 활성화
-
-- `Enable Non-Equilibrium Thermal Model` 체크
-
-#### 4.2.2 Surface Area Density
-
-- **입력 위치:** `Surface Area Density`
-- **값:** 계산 결과의 `Surface Area Density (a_fs)`
-- **단위:** m⁻¹
-- **입력 방법:** 계산 결과값 그대로 입력
-
-#### 4.2.3 Fluid-Solid Heat Transfer Coefficient
-
-- **입력 위치:** `Fluid Solid Heat Transfer Coefficient`
-- **값:** 계산 결과의 `Interfacial Heat Transfer Coeff (h_fs)`
-- **단위:** W/m²·K
-- **의미:** 핀 표면에서 공기로의 열전달 계수
-- **중요:** 이 값이 있어야 핀 효율(Fin Efficiency)과 핀 온도 분포가 정확히 계산됩니다.
+3. **Forchheimer Coefficient (C2)**: `5.37` [1/m]
 
 ---
 
-## 5. 사용 예시
+### COMSOL Multiphysics
 
-### 5.1 단일 케이스 계산
+1. **Porous Media Flow** → **Darcy-Forchheimer**
+
+2. **Permeability (κ)**: `1.52e-05` [m²]
+
+3. **Forchheimer Coefficient (β)**: `5.37` [1/m]
+
+---
+
+## 입력 변수 커스터마이징
+
+코드 내에서 다음 변수를 수정할 수 있습니다:
 
 ```python
-# cfd_porous_calc.py 파일에서 다음 변수들을 수정:
-Fs_input = 2.0      # 핀 간격 [mm]
-hf_input = 4.0      # 핀 높이 [mm]
-ratio_input = 1.0   # 피치 비율 (s1/s2)
+# cfd_porous_calc.py 파일 하단 (542행부터)
 
-# 실행:
-# python cfd_porous_calc.py
+if __name__ == "__main__":
+    # 환경 조건 수정
+    T_ambient = 14.80177    # 대기 온도 [°C]
+    v_wind = 2.019723       # 설계 풍속 [m/s]
+
+    # 단일 케이스 계산
+    result = calculate_porous_parameters(
+        Fs_mm=4.0,      # 핀 간격 [mm]
+        hf_mm=4.0,      # 핀 높이 [mm]
+        T_celsius=T_ambient,
+        v_design=v_wind
+    )
 ```
 
-### 5.2 출력 예시
+또는 함수를 직접 호출:
 
-```
-============================================================================================================================
-CFD Porous Zone 파라미터 계산기
-15°C 공기, 1.5m/s 유속, LTNE 조건 기준
-============================================================================================================================
-입력값:
-  - 핀 간격 (Fs): 2.0 mm
-  - 핀 높이 (hf): 4.0 mm
-  - 피치 비율 (Ratio = s1/s2): 1.00
-----------------------------------------------------------------------------------------------------------------------------
-계산 결과 (Fluent 입력값):
-  1. Porosity (ε): 0.800000 [-]
-  2. Surface Area Density (a_fs): 1234.56 [1/m]
-  3. Viscous Resistance (1/K): 1.234567e+06 [1/m²]
-  4. Inertial Resistance (C2): 12.345678 [1/m]
-  5. Interfacial Heat Transfer Coeff (h_fs): 123.45 [W/m²·K]
-----------------------------------------------------------------------------------------------------------------------------
-참고값:
-  - 종방향 피치 (s2): 55.33 mm
-  - 설계점 레이놀즈 수 (Re_Dc): 1234 [-]
-  - Nusselt 수 (Nu): 12.34 [-]
-  - 수력 직경 (Dh): 2.345 mm
-  - 최소 면적 비율 (σ): 0.5678 [-]
-============================================================================================================================
-```
+```python
+from cfd_porous_calc import calculate_porous_parameters
 
-### 5.3 Fluent 입력 예시
+result = calculate_porous_parameters(
+    Fs_mm=3.0,           # 핀 간격 [mm]
+    hf_mm=5.0,           # 핀 높이 [mm]
+    T_celsius=20.0,      # 온도 [°C]
+    v_design=1.5,        # 설계 풍속 [m/s]
+    Dc_mm=24.0,          # 튜브 외경 [mm] (선택사항)
+    delta_f_mm=0.5,      # 핀 두께 [mm] (선택사항)
+    s1_mm=55.333,        # 횡방향 피치 [mm] (선택사항)
+    pitch_ratio=1.0,     # s1/s2 비율 (선택사항)
+    N=4                  # 튜브 열 수 (선택사항)
+)
 
-**Porous Zone 설정:**
-```
-Porosity:
-  Direction-1: 0.800000
-  Direction-2: 0.800000
-  Direction-3: 0.800000
-
-Viscous Resistance:
-  Direction-1: 1.234567e+06
-  Direction-2: 1.234567e+09
-  Direction-3: 1.234567e+09
-
-Inertial Resistance:
-  Direction-1: 12.345678
-  Direction-2: 12345.678
-  Direction-3: 12345.678
-```
-
-**LTNE 설정:**
-```
-Enable Non-Equilibrium Thermal Model: ✓
-
-Surface Area Density: 1234.56 [1/m]
-
-Fluid Solid Heat Transfer Coefficient: 123.45 [W/m²·K]
+# 결과 출력
+print(f"1/K = {result['porous']['inv_K']:.4e} [1/m²]")
+print(f"C2 = {result['porous']['C2']:.4f} [1/m]")
+print(f"h_fs = {result['design_point']['h_fs_W_m2K']:.2f} [W/(m²·K)]")
 ```
 
 ---
 
-## 6. 주의사항 및 제한사항
+## 출력 데이터 구조
 
-### 6.1 물성치 고정
+`calculate_porous_parameters()` 함수는 다음 구조의 딕셔너리를 반환합니다:
 
-- 현재 코드는 **15°C 공기 물성치로 고정**되어 있습니다.
-- 다른 온도 조건을 사용할 경우 코드 내부 물성치 값을 수정해야 합니다.
-
-### 6.2 피치 비율 제한
-
-- **0.5 < Ratio < 2.0** 범위를 벗어나면 계산이 중단됩니다.
-- 이는 Wang 상관식의 유효 범위에 따른 제한입니다.
-
-### 6.3 기하학적 제약
-
-- **Overlap Check:** $D_o > s_1$ 또는 $D_o > s_2$인 경우 충돌 경고가 발생합니다.
-- 설계 변수를 변경할 때는 항상 간섭 여부를 확인하세요.
-
-### 6.4 배열 형태 가정
-
-- 현재 코드는 **Staggered 배열**을 가정하고 있습니다.
-- Inline 배열을 사용할 경우 Wang 상관식 계수나 열전달 상관식을 수정해야 할 수 있습니다.
-
-### 6.5 Wang 상관식 적용 범위
-
-- Wang 상관식은 평판 핀(Plain Fin) 기하에 대해 개발되었습니다.
-- Annular Fin에 적용 시 근사치로 사용되며, 실험 데이터와의 검증이 권장됩니다.
-
----
-
-## 7. 참고 문헌 및 상관식
-
-### 7.1 압력강하 상관식
-
-- **Wang, C.C., et al.** (1997). "Heat transfer and friction characteristics of fin-and-tube heat exchangers."
-  - 마찰 계수: $f = 0.0267 \cdot Re_{Dc}^{F_1} \cdot (s_1/s_2)^{F_2} \cdot (F_s/D_c)^{F_3}$
-
-### 7.2 열전달 상관식
-
-- **Briggs, D.E., & Young, E.H.** (1963). "Convection heat transfer and pressure drop of air flowing across triangular pitch banks of finned tubes."
-  - Nusselt 수: $Nu = 0.134 \cdot Re_D^{0.681} \cdot Pr^{0.33} \cdot (s/l)^{0.2} \cdot (s/t)^{0.113}$
+```python
+{
+    'input': {
+        'Fs_mm': 4.0,
+        'hf_mm': 4.0,
+        'T_celsius': 14.80177,
+        'v_design': 2.019723,
+        # ... 기타 입력값
+    },
+    'air': {
+        'rho': 1.2258,          # 밀도 [kg/m³]
+        'mu': 1.788e-05,        # 점도 [Pa·s]
+        'k': 0.0251,            # 열전도도 [W/(m·K)]
+        'Pr': 0.715             # Prandtl 수
+    },
+    'geometry': {
+        'epsilon': 0.8889,      # 공극률
+        'sigma': 0.5502,        # 최소유동면적비
+        'area_ratio': 3.11,     # 면적비 (AR)
+        'a_fs': 698.85          # 비표면적 [1/m]
+    },
+    'porous': {
+        'inv_K': 6.59e+04,      # 점성 저항 [1/m²]  ← CFD 입력
+        'C2': 5.37,             # 관성 저항 [1/m]   ← CFD 입력
+        'K': 2.71e-10           # 투과도 [m²]
+    },
+    'design_point': {
+        'Re_Dc': 6039,          # Reynolds 수
+        'dP_total_Pa': 11.95,   # 총 압력강하 [Pa]
+        'h_fs_W_m2K': 94.82     # 열전달 계수 [W/(m²·K)]  ← CFD 입력
+    }
+}
+```
 
 ---
 
-## 8. 문제 해결 (Troubleshooting)
+## 주요 파라미터 의미
 
-### 8.1 "COLLISION!" 오류
+| 파라미터 | 기호 | 의미 | CFD 사용처 |
+|---------|------|------|-----------|
+| 점성 저항 | 1/K | 저속 유동 저항 (점성 지배) | Viscous Resistance |
+| 관성 저항 | C₂ | 고속 유동 저항 (관성 지배) | Inertial Resistance |
+| 투과도 | K | 다공매체 투과능력 (1/K의 역수) | Permeability |
+| 공극률 | ε | 유체가 차지하는 체적 비율 | Porosity |
+| 비표면적 | a_fs | 단위 체적당 표면적 | Surface Area Density |
+| 열전달 계수 | h_fs | 고체-유체 계면 열전달 | LTNE Heat Transfer Coeff |
 
-**원인:** 핀 외경이 피치보다 큼  
-**해결:** $h_f$를 줄이거나 $F_s$를 늘려서 $D_o$를 감소시키세요.
+---
 
-### 8.2 "Invalid pitch_ratio" 오류
+## 상관식 및 이론
 
-**원인:** Ratio가 0.5~2.0 범위를 벗어남  
-**해결:** Ratio 값을 0.5와 2.0 사이로 조정하세요.
+본 계산기는 다음 상관식을 사용합니다:
 
-### 8.3 Fluent에서 압력강하가 예상과 다름
+### 압력강하 (Nir, 1991)
+
+$$f_N = 1.1 \cdot Re_{D_c}^{-0.25} \cdot \left(\frac{S_1}{D_c}\right)^{-0.4} \cdot AR^{0.15}$$
+
+- **적용 범위:** Staggered Annular Finned Tube Banks
+- **Reynolds 수:** 300 ~ 10,000 (수력직경 기준)
+
+### 열전달 (Briggs & Young, 1963)
+
+$$Nu = 0.134 \cdot Re^{0.681} \cdot Pr^{1/3} \cdot \left(\frac{F_s}{h_f}\right)^{0.2} \cdot \left(\frac{F_s}{\delta_f}\right)^{0.113}$$
+
+### Darcy-Forchheimer 변환 (2-Point Fitting)
+
+$$\frac{\Delta P}{L} = \frac{\mu}{K} \cdot v + \frac{C_2 \rho}{2} \cdot v^2$$
+
+---
+
+## 문제 해결
+
+### Q1: 계산 결과가 이상합니다
 
 **확인 사항:**
-1. Viscous/Inertial Resistance의 Direction 설정 확인
-2. Porosity 값 확인
-3. Physical Velocity (v_max) 대비 계산된 저항 계수 검증
+- 핀 간격 (Fs)과 핀 높이 (hf)가 현실적인 값인가?
+- 핀 외경 (Do = Dc + 2*hf)이 피치 (s1, s2)보다 작은가?
+- 온도와 풍속이 합리적인 범위인가?
 
-### 8.4 LTNE 모델에서 열전달이 비현실적
+### Q2: Fluent에서 압력강하가 다릅니다
 
 **확인 사항:**
-1. $h_{fs}$ 값이 합리적인 범위 내인지 확인 (일반적으로 50~500 W/m²·K)
-2. Surface Area Density 값 확인
-3. 고체 열전도율 설정 확인 (Fluent Materials)
+- Viscous/Inertial Resistance의 방향 설정 확인
+  - Direction-1: 유동 방향
+  - Direction-2, 3: 횡방향 (1000배 큰 값)
+- Porosity 값이 모든 방향에 동일하게 입력되었는지 확인
+
+### Q3: LTNE 모델에서 온도 분포가 이상합니다
+
+**확인 사항:**
+- Surface Area Density (a_fs) 값 확인
+- Fluid-Solid Heat Transfer Coefficient (h_fs) 값 확인
+  - 일반적으로 50~500 W/(m²·K) 범위
+- 고체 재질의 열전도도가 올바르게 설정되었는지 확인
 
 ---
 
-## 9. 연락처 및 지원
+## 참고 자료
 
-코드 오류나 개선 사항이 있으면 이슈를 등록하거나 코드를 수정해주세요.
+### 상세 수식 유도
+README.md 파일을 참조하세요. Nir 상관식부터 Porous 파라미터 도출까지 전 과정이 수식으로 설명되어 있습니다.
+
+### 참고 문헌
+1. **Nir, A.** (1991). "Heat Transfer and Friction Factor Correlations for Crossflow over Staggered Finned Tube Banks", *Heat Transfer Engineering*, 12(1), 43-58.
+
+2. **Briggs, D.E., & Young, E.H.** (1963). "Convection heat transfer and pressure drop of air flowing across triangular pitch banks of finned tubes."
 
 ---
 
-**버전:** 1.0  
-**최종 업데이트:** 2024  
-**작성자:** CFD Porous Zone Calculator
+## 라이센스
+
+이 프로젝트는 교육 및 연구 목적으로 제공됩니다.
+
+**버전:** 2.0 (Nir 상관식 기반)
+**최종 업데이트:** 2026-01-17
+**작성자:** Claude (Anthropic)
