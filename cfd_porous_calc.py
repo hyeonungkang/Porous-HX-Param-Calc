@@ -557,7 +557,107 @@ def plot_fitting_results(result: Dict, save_path: str = None):
 
 
 # =============================================================================
-# 8. 결과 출력 함수
+# 8. 텍스트 파일 저장 함수
+# =============================================================================
+
+def save_results_to_txt(result: Dict, save_path: str = None):
+    """
+    계산 결과를 텍스트 파일로 저장
+
+    Parameters:
+        result: calculate_porous_parameters의 반환값
+        save_path: 텍스트 파일 저장 경로 (None이면 자동 생성)
+    """
+    # 파일명 자동 생성 (설계변수 기반, PNG와 동일한 이름)
+    if save_path is None:
+        inp = result['input']
+        save_path = f"Fs{inp['Fs_mm']:.1f}_hf{inp['hf_mm']:.1f}_T{inp['T_celsius']:.1f}_v{inp['v_design']:.2f}.txt"
+
+    inp = result['input']
+    air = result['air']
+    geom = result['geometry']
+    porous = result['porous']
+    design = result['design_point']
+    fit = result['fitting']
+
+    with open(save_path, 'w', encoding='utf-8') as f:
+        f.write("=" * 80 + "\n")
+        f.write("       Annular Fin → Porous Media Parameter Conversion Results\n")
+        f.write("       Nir (1991) Correlation with Multi-Point Least Squares Fitting\n")
+        f.write("=" * 80 + "\n\n")
+
+        f.write("[INPUT CONDITIONS]\n")
+        f.write(f"  Fin Spacing (Fs)        : {inp['Fs_mm']:.1f} mm\n")
+        f.write(f"  Fin Height (hf)         : {inp['hf_mm']:.1f} mm\n")
+        f.write(f"  Air Temperature         : {inp['T_celsius']:.2f} °C\n")
+        f.write(f"  Design Velocity         : {inp['v_design']:.4f} m/s\n")
+        f.write(f"  Tube Outer Diameter (Dc): {inp['Dc_mm']:.1f} mm\n")
+        f.write(f"  Transverse Pitch (s1)   : {inp['s1_mm']:.3f} mm\n")
+        f.write(f"  Number of Tube Rows (N) : {inp['N']}\n")
+        f.write(f"  Fin Thickness (δf)      : {inp['delta_f_mm']:.2f} mm\n")
+        f.write(f"  Pitch Ratio (s1/s2)     : {inp['pitch_ratio']:.2f}\n\n")
+
+        f.write("[AIR PROPERTIES @ {:.2f}°C]\n".format(inp['T_celsius']))
+        f.write(f"  Density (ρ)             : {air['rho']:.4f} kg/m³\n")
+        f.write(f"  Viscosity (μ)           : {air['mu']:.4e} Pa·s\n")
+        f.write(f"  Thermal Conductivity (k): {air['k']:.4f} W/(m·K)\n")
+        f.write(f"  Prandtl Number (Pr)     : {air['Pr']:.3f}\n\n")
+
+        f.write("[GEOMETRIC PARAMETERS]\n")
+        f.write(f"  Fin Outer Diameter (Do) : {geom['Do_mm']:.1f} mm\n")
+        f.write(f"  Fin Pitch (Fp)          : {geom['Fp_mm']:.2f} mm\n")
+        f.write(f"  Longitudinal Pitch (s2) : {geom['s2_mm']:.3f} mm\n")
+        f.write(f"  Porosity (ε)            : {geom['epsilon']:.4f}\n")
+        f.write(f"  Min. Flow Area Ratio (σ): {geom['sigma']:.4f}\n")
+        f.write(f"  Area Ratio (Atot/Abare) : {geom['area_ratio']:.3f}\n")
+        f.write(f"  Specific Surface (a_fs) : {geom['a_fs']:.2f} 1/m\n\n")
+
+        f.write("=" * 80 + "\n")
+        f.write("  ★★★ CFD POROUS MEDIA INPUT PARAMETERS (KEY OUTPUT) ★★★\n")
+        f.write("=" * 80 + "\n")
+        f.write(f"  Viscous Resistance (1/K): {porous['inv_K']:.4e}  [1/m²]\n")
+        f.write(f"  Inertial Resistance (C2): {porous['C2']:.4f}  [1/m]\n")
+        f.write(f"  Permeability (K)        : {porous['K']:.4e}  [m²]\n")
+        f.write(f"  Porosity (ε)            : {geom['epsilon']:.4f}  [-]\n")
+        f.write(f"  Specific Surface (a_fs) : {geom['a_fs']:.2f}  [1/m]\n")
+        f.write("=" * 80 + "\n\n")
+
+        f.write("[DESIGN POINT PERFORMANCE]\n")
+        f.write(f"  Reynolds Number (Re_Dc) : {design['Re_Dc']:.1f}\n")
+        f.write(f"  Total Pressure Drop     : {design['dP_total_Pa']:.2f} Pa\n")
+        f.write(f"  Pressure Drop per Length: {design['dP_per_L_Pa_m']:.2f} Pa/m\n")
+        f.write(f"  Heat Transfer Coef (hfs): {design['h_fs_W_m2K']:.2f} W/(m²·K)\n\n")
+
+        f.write("[FITTING INFORMATION]\n")
+        f.write(f"  Velocity Range          : {inp['v_range'][0]:.1f} ~ {inp['v_range'][1]:.1f} m/s\n")
+        f.write(f"  Number of Fitting Points: {inp['n_points']}\n")
+        f.write(f"  Reynolds Number Range   : {fit['Re_min']:.1f} ~ {fit['Re_max']:.1f}\n")
+        f.write(f"  Coefficient of Determination (R²): {porous['R_squared']:.8f}\n")
+        f.write(f"  Darcy-Forchheimer Coef A: {porous['A']:.4e} [Pa·s/m²]\n")
+        f.write(f"  Darcy-Forchheimer Coef B: {porous['B']:.4e} [Pa·s²/m³]\n\n")
+
+        f.write("[KEY EQUATIONS]\n")
+        f.write("  Nir (1991) Friction Factor:\n")
+        f.write("    f_N = 1.1 × Re^(-0.25) × (S1/Dc)^(-0.4) × (Atot/Abare)^(0.15)\n\n")
+        f.write("  Pressure Drop:\n")
+        f.write("    ΔP = N × f_N × (ρ × v_max²) / 2\n\n")
+        f.write("  Darcy-Forchheimer Equation:\n")
+        f.write("    ΔP/L = (μ/K)·v + (C2·ρ/2)·v²\n")
+        f.write("    ΔP/L = A·v + B·v²\n\n")
+        f.write("  Multi-Point Least Squares Fitting:\n")
+        f.write("    Minimize: Σ(Yi - A·vi - B·vi²)²\n")
+        f.write(f"    Solution: Normal Equations (X^T X)[A B]^T = X^T Y\n\n")
+
+        f.write("=" * 80 + "\n")
+        f.write("Generated by: Nir (1991) Porous Parameter Calculator\n")
+        f.write("Date: 2026-01-17\n")
+        f.write("=" * 80 + "\n")
+
+    print(f"✓ Results saved to text file: {save_path}")
+
+
+# =============================================================================
+# 9. 결과 출력 함수
 # =============================================================================
 
 def print_results(result: Dict):
@@ -622,7 +722,7 @@ def print_results(result: Dict):
 
 
 # =============================================================================
-# 9. CLI 인터페이스
+# 10. CLI 인터페이스
 # =============================================================================
 
 def get_cli_input():
@@ -692,7 +792,7 @@ def get_cli_input():
 
 
 # =============================================================================
-# 10. 메인 실행
+# 11. 메인 실행
 # =============================================================================
 
 if __name__ == "__main__":
@@ -752,6 +852,9 @@ if __name__ == "__main__":
     # 시각화
     if not args.no_plot:
         plot_fitting_results(result)
+
+    # 텍스트 파일로 결과 저장
+    save_results_to_txt(result)
 
     # JSON 출력 (선택사항)
     print("\n[JSON 형식 출력]")
