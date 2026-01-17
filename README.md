@@ -161,7 +161,8 @@ $$v_i = v_{min} + \frac{i-1}{n-1}(v_{max} - v_{min}), \quad i = 1, 2, \ldots, n$
 각 속도점 $v_i$에서 Nir 상관식으로 압력강하 $Y_i$ 계산 후,
 다음 선형 시스템을 최소제곱법으로 해결:
 
-$$\begin{bmatrix}
+$$
+\begin{bmatrix}
 v_1 & v_1^2 \\
 v_2 & v_2^2 \\
 \vdots & \vdots \\
@@ -177,7 +178,8 @@ Y_1 \\
 Y_2 \\
 \vdots \\
 Y_n
-\end{bmatrix}$$
+\end{bmatrix}
+$$
 
 ### 6.4 해법 (Normal Equations)
 
