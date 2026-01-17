@@ -6,6 +6,9 @@ Annular Fin → Porous Media 파라미터 변환 계산기
 Nir (1991) 마찰계수 상관식을 사용하여 CFD Porous Media의
 점성 저항 계수(1/K)와 관성 저항 계수(C2)를 도출합니다.
 
+다중점 피팅 방식: 1~3 m/s 범위에서 여러 속도점을 계산하여
+최소제곱법으로 Darcy-Forchheimer 계수를 정확하게 근사합니다.
+
 Reference:
     Nir, A. (1991). "Heat Transfer and Friction Factor Correlations for
     Crossflow over Staggered Finned Tube Banks", Heat Transfer Engineering,
@@ -20,6 +23,18 @@ import math
 import numpy as np
 from dataclasses import dataclass
 from typing import Tuple, Dict, List
+import argparse
+import sys
+
+# matplotlib 임포트 (시각화용)
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib
+    matplotlib.use('Agg')  # GUI 없이도 작동
+    HAS_MATPLOTLIB = True
+except ImportError:
+    HAS_MATPLOTLIB = False
+    print("Warning: matplotlib not found. Visualization will be disabled.")
 
 # =============================================================================
 # 1. 물성치 계산 함수
@@ -35,7 +50,7 @@ def air_properties(T_celsius: float) -> Dict[str, float]:
     Returns:
         dict: 공기 물성치
             - rho: 밀도 [kg/m³]
-            - mu: 동점성계수 [Pa·s]
+            - mu: 점성계수 [Pa·s]
             - k: 열전도도 [W/(m·K)]
             - Pr: Prandtl 수 [-]
             - nu: 동점성계수 [m²/s]
@@ -47,7 +62,7 @@ def air_properties(T_celsius: float) -> Dict[str, float]:
     # 밀도 (이상기체 상태방정식)
     rho = P / (R * T_K)
 
-    # 동점성계수 (Sutherland's Law)
+    # 점성계수 (Sutherland's Law)
     # μ = μ_ref * (T/T_ref)^1.5 * (T_ref + S) / (T + S)
     mu_ref = 1.716e-5  # [Pa·s] at 273.15K
     T_ref = 273.15
@@ -214,56 +229,65 @@ def calculate_pressure_drop(v_inlet: float, geom: AnnularFinGeometry,
 
 
 # =============================================================================
-# 4. 2-Point Fitting을 통한 Porous 파라미터 도출
+# 4. 다중점 피팅을 통한 Porous 파라미터 도출
 # =============================================================================
 
-def fit_darcy_forchheimer(v1: float, v2: float,
-                          geom: AnnularFinGeometry,
-                          air_props: Dict[str, float]) -> Dict[str, float]:
+def fit_darcy_forchheimer_multipoint(
+    v_range: Tuple[float, float],
+    n_points: int,
+    geom: AnnularFinGeometry,
+    air_props: Dict[str, float]
+) -> Dict[str, float]:
     """
-    2-Point Fitting을 통한 Darcy-Forchheimer 계수 도출
+    다중점 피팅을 통한 Darcy-Forchheimer 계수 도출
 
-    Nir 상관식: f_N ∝ Re^(-0.25) → ΔP/L ∝ v^1.75 (정확한 Darcy-Forchheimer 형태가 아님)
-
-    따라서 두 속도점에서 계산 후, ΔP/L = A×v + B×v² 형태로 피팅
-
-    수식 유도:
-        Y1 = A×v1 + B×v1²
-        Y2 = A×v2 + B×v2²
-
-        Z1 = Y1/v1 = A + B×v1
-        Z2 = Y2/v2 = A + B×v2
-
-        B = (Z1 - Z2) / (v1 - v2)
-        A = Z1 - B×v1
+    1~3 m/s 범위에서 여러 속도점을 계산한 후,
+    최소제곱법으로 ΔP/L = A×v + B×v² 형태로 피팅
 
     Parameters:
-        v1, v2: 피팅에 사용할 두 속도점 [m/s]
+        v_range: (v_min, v_max) 속도 범위 [m/s]
+        n_points: 피팅에 사용할 점의 개수
         geom: AnnularFinGeometry 객체
         air_props: 공기 물성치 dict
 
     Returns:
-        dict: Porous 파라미터
-            - A: 선형 계수 [Pa·s/m²]
-            - B: 2차 계수 [Pa·s²/m³]
-            - inv_K: 점성 저항 계수 1/K [1/m²]
-            - C2: 관성 저항 계수 [1/m]
-            - K: 투과도 [m²]
+        dict: Porous 파라미터 및 피팅 정보
     """
     rho = air_props['rho']
     mu = air_props['mu']
 
-    # 두 속도점에서 압력강하 계산
-    _, Y1, Re1 = calculate_pressure_drop(v1, geom, air_props)
-    _, Y2, Re2 = calculate_pressure_drop(v2, geom, air_props)
+    v_min, v_max = v_range
 
-    # 선형화를 위한 변환
-    Z1 = Y1 / v1
-    Z2 = Y2 / v2
+    # 속도 범위 생성
+    v_points = np.linspace(v_min, v_max, n_points)
 
-    # 계수 계산
-    B = (Z1 - Z2) / (v1 - v2)
-    A = Z1 - B * v1
+    # 각 속도점에서 압력강하 계산
+    Y_points = []
+    Re_points = []
+
+    for v in v_points:
+        _, Y, Re = calculate_pressure_drop(v, geom, air_props)
+        Y_points.append(Y)
+        Re_points.append(Re)
+
+    v_points = np.array(v_points)
+    Y_points = np.array(Y_points)
+    Re_points = np.array(Re_points)
+
+    # 최소제곱법 피팅: Y = A*v + B*v²
+    # 선형 시스템으로 변환: Y = [v, v²] · [A, B]^T
+    # 행렬 형태: [v1, v1²]   [A]   [Y1]
+    #           [v2, v2²] × [B] = [Y2]
+    #           [  ...  ]         [ ...]
+
+    # Design matrix
+    X_matrix = np.column_stack([v_points, v_points**2])
+
+    # 최소제곱법 해: (X^T X)^(-1) X^T Y
+    coeffs, residuals, rank, s = np.linalg.lstsq(X_matrix, Y_points, rcond=None)
+
+    A = coeffs[0]  # 선형 계수
+    B = coeffs[1]  # 2차 계수
 
     # Porous 파라미터 변환
     # ΔP/L = A×v + B×v² = (μ/K)×v + (C2×ρ/2)×v²
@@ -272,18 +296,27 @@ def fit_darcy_forchheimer(v1: float, v2: float,
     K = mu / A            # 투과도 [m²]
     C2 = 2 * B / rho      # 관성 저항 계수 [1/m]
 
+    # R² (결정계수) 계산
+    Y_fit = A * v_points + B * v_points**2
+    SS_res = np.sum((Y_points - Y_fit)**2)
+    SS_tot = np.sum((Y_points - np.mean(Y_points))**2)
+    R_squared = 1 - (SS_res / SS_tot)
+
     return {
         'A': A,
         'B': B,
         'inv_K': inv_K,      # Viscous Resistance (Fluent: 1/α)
         'C2': C2,            # Inertial Resistance (Fluent: C2)
         'K': K,              # Permeability
-        'Re_low': Re2,
-        'Re_high': Re1,
-        'v1': v1,
-        'v2': v2,
-        'Y1': Y1,
-        'Y2': Y2
+        'R_squared': R_squared,  # 피팅 품질
+        'residual_sum': residuals[0] if len(residuals) > 0 else 0,
+        # 피팅 데이터
+        'v_points': v_points,
+        'Y_points': Y_points,
+        'Y_fit': Y_fit,
+        'Re_points': Re_points,
+        'Re_min': Re_points.min(),
+        'Re_max': Re_points.max()
     }
 
 
@@ -336,7 +369,9 @@ def calculate_porous_parameters(
     delta_f_mm: float = 0.5,# 핀 두께 [mm]
     s1_mm: float = 55.333,  # 횡방향 피치 [mm]
     pitch_ratio: float = 1.0,# s1/s2 비율
-    N: int = 4              # 튜브 열 수
+    N: int = 4,             # 튜브 열 수
+    v_range: Tuple[float, float] = (1.0, 3.0),  # 피팅 속도 범위
+    n_points: int = 50      # 피팅 점 개수
 ) -> Dict:
     """
     Annular Fin을 Porous Media로 근사하기 위한 모든 파라미터 계산
@@ -351,6 +386,8 @@ def calculate_porous_parameters(
         s1_mm: 횡방향 피치 [mm] (기본값: 55.333)
         pitch_ratio: s1/s2 비율 (기본값: 1.0)
         N: 튜브 열 수 (기본값: 4)
+        v_range: 피팅 속도 범위 [m/s] (기본값: 1~3)
+        n_points: 피팅 점 개수 (기본값: 50)
 
     Returns:
         dict: 모든 계산 결과
@@ -371,11 +408,10 @@ def calculate_porous_parameters(
         pitch_ratio=pitch_ratio, N=N
     )
 
-    # 2-Point Fitting (설계 속도의 1.0배와 0.3배)
-    v_high = v_design
-    v_low = v_design * 0.3
-
-    porous_params = fit_darcy_forchheimer(v_high, v_low, geom, air_props)
+    # 다중점 피팅
+    porous_params = fit_darcy_forchheimer_multipoint(
+        v_range, n_points, geom, air_props
+    )
 
     # 설계점에서의 압력강하 및 Reynolds 수
     dP_total, dP_per_L, Re_design = calculate_pressure_drop(v_design, geom, air_props)
@@ -394,7 +430,9 @@ def calculate_porous_parameters(
             'delta_f_mm': delta_f_mm,
             's1_mm': s1_mm,
             'pitch_ratio': pitch_ratio,
-            'N': N
+            'N': N,
+            'v_range': v_range,
+            'n_points': n_points
         },
         # 공기 물성치
         'air': air_props,
@@ -416,7 +454,8 @@ def calculate_porous_parameters(
             'C2': porous_params['C2'],         # [1/m]
             'K': porous_params['K'],           # [m²]
             'A': porous_params['A'],           # [Pa·s/m²]
-            'B': porous_params['B']            # [Pa·s²/m³]
+            'B': porous_params['B'],           # [Pa·s²/m³]
+            'R_squared': porous_params['R_squared']
         },
         # 설계점 결과
         'design_point': {
@@ -427,23 +466,74 @@ def calculate_porous_parameters(
         },
         # 피팅 정보
         'fitting': {
-            'v_high': v_high,
-            'v_low': v_low,
-            'Re_high': porous_params['Re_high'],
-            'Re_low': porous_params['Re_low']
+            'v_points': porous_params['v_points'],
+            'Y_points': porous_params['Y_points'],
+            'Y_fit': porous_params['Y_fit'],
+            'Re_points': porous_params['Re_points'],
+            'Re_min': porous_params['Re_min'],
+            'Re_max': porous_params['Re_max']
         }
     }
 
 
 # =============================================================================
-# 7. 결과 출력 함수
+# 7. 시각화 함수
+# =============================================================================
+
+def plot_fitting_results(result: Dict, save_path: str = 'porous_fitting.png'):
+    """
+    피팅 결과를 시각화
+
+    Parameters:
+        result: calculate_porous_parameters의 반환값
+        save_path: 이미지 저장 경로
+    """
+    if not HAS_MATPLOTLIB:
+        print("matplotlib이 설치되지 않아 시각화를 건너뜁니다.")
+        return
+
+    v_points = result['fitting']['v_points']
+    Y_points = result['fitting']['Y_points']
+    Y_fit = result['fitting']['Y_fit']
+    R_squared = result['porous']['R_squared']
+
+    # Figure 생성
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+
+    # 왼쪽: 압력강하 vs 속도
+    ax1.scatter(v_points, Y_points, color='blue', s=50, alpha=0.6,
+                label='Nir Correlation (계산점)', zorder=3)
+    ax1.plot(v_points, Y_fit, 'r-', linewidth=2,
+             label=f'Darcy-Forchheimer Fit (R²={R_squared:.6f})', zorder=2)
+    ax1.set_xlabel('Velocity [m/s]', fontsize=12)
+    ax1.set_ylabel('Pressure Drop per Length [Pa/m]', fontsize=12)
+    ax1.set_title('Pressure Drop Fitting', fontsize=14, fontweight='bold')
+    ax1.grid(True, alpha=0.3)
+    ax1.legend(fontsize=10)
+
+    # 오른쪽: 잔차 플롯
+    residuals = Y_points - Y_fit
+    ax2.scatter(v_points, residuals, color='green', s=50, alpha=0.6)
+    ax2.axhline(y=0, color='r', linestyle='--', linewidth=2)
+    ax2.set_xlabel('Velocity [m/s]', fontsize=12)
+    ax2.set_ylabel('Residuals [Pa/m]', fontsize=12)
+    ax2.set_title('Fitting Residuals', fontsize=14, fontweight='bold')
+    ax2.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.savefig(save_path, dpi=150, bbox_inches='tight')
+    print(f"\n✓ 시각화 저장: {save_path}")
+
+
+# =============================================================================
+# 8. 결과 출력 함수
 # =============================================================================
 
 def print_results(result: Dict):
     """계산 결과를 보기 좋게 출력"""
-    print("=" * 70)
+    print("\n" + "=" * 80)
     print("       Annular Fin → Porous Media 파라미터 변환 결과")
-    print("=" * 70)
+    print("=" * 80)
 
     inp = result['input']
     print(f"\n[입력 조건]")
@@ -473,13 +563,15 @@ def print_results(result: Dict):
     print(f"  비표면적 (a_fs)     : {geom['a_fs']:.2f} 1/m")
 
     porous = result['porous']
-    print(f"\n{'='*70}")
+    print(f"\n{'='*80}")
     print(f"  ★★★ CFD Porous Media 입력값 (핵심 출력) ★★★")
-    print(f"{'='*70}")
+    print(f"{'='*80}")
     print(f"  점성 저항 (1/K)     : {porous['inv_K']:.4e}  [1/m²]")
     print(f"  관성 저항 (C2)      : {porous['C2']:.4f}  [1/m]")
     print(f"  투과도 (K)          : {porous['K']:.4e}  [m²]")
-    print(f"{'='*70}")
+    print(f"  공극률 (ε)          : {geom['epsilon']:.4f}  [-]")
+    print(f"  비표면적 (a_fs)     : {geom['a_fs']:.2f}  [1/m]")
+    print(f"{'='*80}")
 
     design = result['design_point']
     print(f"\n[설계점 성능]")
@@ -489,124 +581,166 @@ def print_results(result: Dict):
     print(f"  열전달 계수 (h_fs)  : {design['h_fs_W_m2K']:.2f} W/(m²·K)")
 
     fit = result['fitting']
-    print(f"\n[2-Point Fitting 정보]")
-    print(f"  고속점: v = {fit['v_high']:.4f} m/s, Re = {fit['Re_high']:.1f}")
-    print(f"  저속점: v = {fit['v_low']:.4f} m/s, Re = {fit['Re_low']:.1f}")
+    print(f"\n[피팅 정보]")
+    print(f"  피팅 속도 범위      : {inp['v_range'][0]:.1f} ~ {inp['v_range'][1]:.1f} m/s")
+    print(f"  피팅 점 개수        : {inp['n_points']}")
+    print(f"  Reynolds 수 범위    : {fit['Re_min']:.1f} ~ {fit['Re_max']:.1f}")
+    print(f"  결정계수 (R²)       : {porous['R_squared']:.8f}")
 
-    print("\n" + "=" * 70)
-
-
-def generate_parameter_table(cases: List[Tuple[float, float]],
-                             T_celsius: float, v_design: float) -> None:
-    """
-    여러 케이스에 대한 파라미터 테이블 생성
-
-    Parameters:
-        cases: [(Fs_mm, hf_mm), ...] 리스트
-        T_celsius: 대기 온도 [°C]
-        v_design: 설계 풍속 [m/s]
-    """
-    print("\n" + "=" * 100)
-    print(f"  Porous 파라미터 비교표 (T = {T_celsius:.2f}°C, v = {v_design:.4f} m/s)")
-    print("=" * 100)
-
-    header = f"{'Fs':>4} {'hf':>4} | {'ε':>7} {'σ':>7} {'AR':>6} | {'1/K [1/m²]':>12} {'C2 [1/m]':>10} | {'ΔP [Pa]':>9} {'h [W/m²K]':>10}"
-    print(header)
-    print("-" * 100)
-
-    for Fs_mm, hf_mm in cases:
-        result = calculate_porous_parameters(
-            Fs_mm=Fs_mm,
-            hf_mm=hf_mm,
-            T_celsius=T_celsius,
-            v_design=v_design
-        )
-
-        g = result['geometry']
-        p = result['porous']
-        d = result['design_point']
-
-        print(f"{Fs_mm:>4.0f} {hf_mm:>4.0f} | "
-              f"{g['epsilon']:>7.4f} {g['sigma']:>7.4f} {g['area_ratio']:>6.2f} | "
-              f"{p['inv_K']:>12.4e} {p['C2']:>10.4f} | "
-              f"{d['dP_total_Pa']:>9.2f} {d['h_fs_W_m2K']:>10.2f}")
-
-    print("=" * 100)
-    print("Note: ε=공극률, σ=최소유동면적비, AR=면적비(Atot/Abare)")
+    print("\n" + "=" * 80)
 
 
 # =============================================================================
-# 8. 메인 실행
+# 9. CLI 인터페이스
+# =============================================================================
+
+def get_cli_input():
+    """
+    CLI에서 사용자 입력을 받습니다.
+
+    Returns:
+        dict: 입력 파라미터
+    """
+    print("\n" + "█" * 80)
+    print("  Nir (1991) 상관식 기반 Annular Fin Porous 파라미터 계산기")
+    print("  다중점 피팅 방식 (1~3 m/s 범위)")
+    print("█" * 80)
+    print()
+
+    try:
+        Fs_mm = float(input("핀 간격 (Fs) [mm] (예: 4.0): "))
+        hf_mm = float(input("핀 높이 (hf) [mm] (예: 4.0): "))
+        T_celsius = float(input("대기 온도 [°C] (예: 14.8): "))
+        v_design = float(input("설계 풍속 [m/s] (예: 2.0): "))
+
+        print("\n고급 설정 (Enter로 기본값 사용)")
+        Dc_mm_str = input(f"튜브 외경 (Dc) [mm] (기본값: 24.0): ")
+        Dc_mm = float(Dc_mm_str) if Dc_mm_str.strip() else 24.0
+
+        delta_f_mm_str = input(f"핀 두께 (δf) [mm] (기본값: 0.5): ")
+        delta_f_mm = float(delta_f_mm_str) if delta_f_mm_str.strip() else 0.5
+
+        s1_mm_str = input(f"횡방향 피치 (s1) [mm] (기본값: 55.333): ")
+        s1_mm = float(s1_mm_str) if s1_mm_str.strip() else 55.333
+
+        pitch_ratio_str = input(f"피치 비율 (s1/s2) (기본값: 1.0): ")
+        pitch_ratio = float(pitch_ratio_str) if pitch_ratio_str.strip() else 1.0
+
+        N_str = input(f"튜브 열 수 (기본값: 4): ")
+        N = int(N_str) if N_str.strip() else 4
+
+        v_min_str = input(f"피팅 최소 속도 [m/s] (기본값: 1.0): ")
+        v_min = float(v_min_str) if v_min_str.strip() else 1.0
+
+        v_max_str = input(f"피팅 최대 속도 [m/s] (기본값: 3.0): ")
+        v_max = float(v_max_str) if v_max_str.strip() else 3.0
+
+        n_points_str = input(f"피팅 점 개수 (기본값: 50): ")
+        n_points = int(n_points_str) if n_points_str.strip() else 50
+
+        return {
+            'Fs_mm': Fs_mm,
+            'hf_mm': hf_mm,
+            'T_celsius': T_celsius,
+            'v_design': v_design,
+            'Dc_mm': Dc_mm,
+            'delta_f_mm': delta_f_mm,
+            's1_mm': s1_mm,
+            'pitch_ratio': pitch_ratio,
+            'N': N,
+            'v_range': (v_min, v_max),
+            'n_points': n_points
+        }
+
+    except ValueError as e:
+        print(f"\n[오류] 숫자를 올바르게 입력해주세요: {e}")
+        sys.exit(1)
+    except KeyboardInterrupt:
+        print("\n\n프로그램이 중단되었습니다.")
+        sys.exit(0)
+
+
+# =============================================================================
+# 10. 메인 실행
 # =============================================================================
 
 if __name__ == "__main__":
-    # 사용자 지정 조건
-    T_ambient = 14.80177    # 연평균 온도 [°C]
-    v_wind = 2.019723       # 연평균 풍속 [m/s]
-
-    print("\n" + "█" * 70)
-    print("  Nir (1991) 상관식 기반 Annular Fin Porous 파라미터 계산기")
-    print("█" * 70)
-    print(f"\n  환경 조건: T = {T_ambient}°C, v = {v_wind} m/s")
-
-    # 단일 케이스 상세 결과
-    print("\n\n[Case 1] 상세 결과 - Fs=4mm, hf=4mm")
-    result = calculate_porous_parameters(
-        Fs_mm=4.0,
-        hf_mm=4.0,
-        T_celsius=T_ambient,
-        v_design=v_wind
+    # argparse 설정
+    parser = argparse.ArgumentParser(
+        description='Annular Fin → Porous Media 파라미터 계산기 (Nir 1991)',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+예시:
+  python cfd_porous_calc.py --Fs 4.0 --hf 4.0 --T 15 --v 2.0
+  python cfd_porous_calc.py --interactive
+        """
     )
+
+    parser.add_argument('--Fs', type=float, help='핀 간격 [mm]')
+    parser.add_argument('--hf', type=float, help='핀 높이 [mm]')
+    parser.add_argument('--T', type=float, help='대기 온도 [°C]')
+    parser.add_argument('--v', type=float, help='설계 풍속 [m/s]')
+    parser.add_argument('--Dc', type=float, default=24.0, help='튜브 외경 [mm] (기본: 24.0)')
+    parser.add_argument('--delta_f', type=float, default=0.5, help='핀 두께 [mm] (기본: 0.5)')
+    parser.add_argument('--s1', type=float, default=55.333, help='횡방향 피치 [mm] (기본: 55.333)')
+    parser.add_argument('--pitch_ratio', type=float, default=1.0, help='s1/s2 비율 (기본: 1.0)')
+    parser.add_argument('--N', type=int, default=4, help='튜브 열 수 (기본: 4)')
+    parser.add_argument('--v_min', type=float, default=1.0, help='피팅 최소 속도 [m/s] (기본: 1.0)')
+    parser.add_argument('--v_max', type=float, default=3.0, help='피팅 최대 속도 [m/s] (기본: 3.0)')
+    parser.add_argument('--n_points', type=int, default=50, help='피팅 점 개수 (기본: 50)')
+    parser.add_argument('--interactive', '-i', action='store_true', help='대화형 입력 모드')
+    parser.add_argument('--no-plot', action='store_true', help='시각화 생성 안 함')
+
+    args = parser.parse_args()
+
+    # 대화형 모드 또는 필수 인자 확인
+    if args.interactive or (args.Fs is None or args.hf is None or args.T is None or args.v is None):
+        params = get_cli_input()
+    else:
+        params = {
+            'Fs_mm': args.Fs,
+            'hf_mm': args.hf,
+            'T_celsius': args.T,
+            'v_design': args.v,
+            'Dc_mm': args.Dc,
+            'delta_f_mm': args.delta_f,
+            's1_mm': args.s1,
+            'pitch_ratio': args.pitch_ratio,
+            'N': args.N,
+            'v_range': (args.v_min, args.v_max),
+            'n_points': args.n_points
+        }
+
+    # 계산 실행
+    print("\n계산 중...")
+    result = calculate_porous_parameters(**params)
+
+    # 결과 출력
     print_results(result)
 
-    # 여러 케이스 비교
-    test_cases = [
-        (2, 4),   # 조밀한 핀
-        (4, 4),   # 기준 케이스
-        (6, 4),   # 넓은 간격
-        (8, 4),   # 매우 넓은 간격
-        (4, 5),   # 핀 높이 증가
-        (4, 6),   # 핀 높이 더 증가
-        (4, 8),   # 큰 핀
-    ]
+    # 시각화
+    if not args.no_plot:
+        plot_fitting_results(result)
 
-    generate_parameter_table(test_cases, T_ambient, v_wind)
-
-    # Fluent/COMSOL 입력 가이드
-    print("\n" + "=" * 70)
-    print("  CFD 소프트웨어 입력 가이드")
-    print("=" * 70)
-    print("""
-  [ANSYS Fluent]
-  - Cell Zone Conditions → Porous Zone 체크
-  - Viscous Resistance (1/m²): 위 표의 '1/K' 값 입력
-  - Inertial Resistance (1/m): 위 표의 'C2' 값 입력
-  - 방향: 유동 방향(Streamwise)에 위 값, 횡방향(Transverse)에 1000배 입력
-
-  [SimScale]
-  - Advanced Concepts → Porous Media
-  - Permeability K (m²): 1/(1/K 값) 계산하여 입력
-  - Forchheimer coefficient C_F (1/m): C2 값 직접 입력
-
-  [COMSOL]
-  - Porous Media Flow → Darcy-Forchheimer
-  - Permeability (m²): K 값 입력
-  - Forchheimer coefficient (1/m): C2 값 입력
-    """)
-
-    # JSON 출력 (다른 프로그램과 연동용)
-    print("\n[JSON 형식 출력 (Fs=4mm, hf=4mm)]")
+    # JSON 출력 (선택사항)
+    print("\n[JSON 형식 출력]")
     import json
     json_output = {
-        'T_celsius': T_ambient,
-        'v_m_s': v_wind,
-        'Fs_mm': 4.0,
-        'hf_mm': 4.0,
+        'input': result['input'],
         'porous_parameters': {
             'inv_K_1_m2': result['porous']['inv_K'],
             'C2_1_m': result['porous']['C2'],
             'K_m2': result['porous']['K'],
-            'porosity': result['geometry']['epsilon']
+            'porosity': result['geometry']['epsilon'],
+            'a_fs_1_m': result['geometry']['a_fs'],
+            'R_squared': result['porous']['R_squared']
+        },
+        'design_point': {
+            'Re_Dc': result['design_point']['Re_Dc'],
+            'dP_total_Pa': result['design_point']['dP_total_Pa'],
+            'h_fs_W_m2K': result['design_point']['h_fs_W_m2K']
         }
     }
     print(json.dumps(json_output, indent=2))
+
+    print("\n계산 완료!")

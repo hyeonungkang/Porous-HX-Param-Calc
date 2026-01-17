@@ -138,7 +138,7 @@ $$\boxed{\frac{\Delta P}{L} = \underbrace{\frac{\mu}{K} \cdot v}_{\text{점성 �
 
 ---
 
-## 6. 2-Point Fitting: 핵심 변환
+## 6. 다중점 피팅 (Multi-point Fitting): 핵심 변환
 
 ### 6.1 목표
 
@@ -146,34 +146,55 @@ Nir 식의 $Y(v) \propto v^{1.75}$를 Darcy-Forchheimer 형태로 근사:
 
 $$Y(v) \approx A \cdot v + B \cdot v^2$$
 
-### 6.2 두 속도점 선택
+### 6.2 속도 범위 선택
 
-| 점 | 속도 | 용도 |
-|----|------|------|
-| 고속점 | $v_1 = v_{design}$ | 설계 조건 |
-| 저속점 | $v_2 = 0.3 \cdot v_{design}$ | 저속 영역 보정 |
+**1~3 m/s 범위**에서 **50개 점**(기본값)을 균등 분포로 선택:
 
-### 6.3 연립방정식
+$$v_i = v_{min} + \frac{i-1}{n-1}(v_{max} - v_{min}), \quad i = 1, 2, \ldots, n$$
 
-$$\begin{cases}
-Y_1 = A \cdot v_1 + B \cdot v_1^2 \\[6pt]
-Y_2 = A \cdot v_2 + B \cdot v_2^2
-\end{cases}$$
+- $v_{min} = 1.0$ m/s (저속 영역)
+- $v_{max} = 3.0$ m/s (고속 영역)
+- $n = 50$ (피팅 점 개수)
 
-### 6.4 해법
+### 6.3 최소제곱법 (Least Squares Method)
 
-**Step 1:** 양변을 속도로 나누어 선형화
+각 속도점 $v_i$에서 Nir 상관식으로 압력강하 $Y_i$ 계산 후,
+다음 선형 시스템을 최소제곱법으로 해결:
 
-$$Z_1 = \frac{Y_1}{v_1} = A + B \cdot v_1$$
-$$Z_2 = \frac{Y_2}{v_2} = A + B \cdot v_2$$
+$$\begin{bmatrix}
+v_1 & v_1^2 \\
+v_2 & v_2^2 \\
+\vdots & \vdots \\
+v_n & v_n^2
+\end{bmatrix}
+\begin{bmatrix}
+A \\
+B
+\end{bmatrix}
+=
+\begin{bmatrix}
+Y_1 \\
+Y_2 \\
+\vdots \\
+Y_n
+\end{bmatrix}$$
 
-**Step 2:** $B$ 도출
+### 6.4 해법 (Normal Equations)
 
-$$\boxed{B = \frac{Z_1 - Z_2}{v_1 - v_2} = \frac{Y_1/v_1 - Y_2/v_2}{v_1 - v_2}}$$
+$$\mathbf{X}^T \mathbf{X} \begin{bmatrix} A \\ B \end{bmatrix} = \mathbf{X}^T \mathbf{Y}$$
 
-**Step 3:** $A$ 도출
+여기서:
+- $\mathbf{X}$ = Design matrix $[v_i, v_i^2]$
+- $\mathbf{Y}$ = 압력강하 벡터 $[Y_1, Y_2, \ldots, Y_n]^T$
 
-$$\boxed{A = Z_1 - B \cdot v_1 = \frac{Y_1}{v_1} - B \cdot v_1}$$
+**결정계수 (R²)**로 피팅 품질 평가:
+
+$$R^2 = 1 - \frac{\sum_i (Y_i - \hat{Y}_i)^2}{\sum_i (Y_i - \bar{Y})^2}$$
+
+여기서 $\hat{Y}_i = A \cdot v_i + B \cdot v_i^2$ (피팅값)
+
+> **장점:** 2-Point Fitting 대비 **훨씬 정확** (일반적으로 $R^2 > 0.999$)
+> 전체 속도 범위에서 고르게 근사
 
 ---
 
@@ -234,10 +255,10 @@ $$\frac{C_2 \rho}{2} = B \quad \Rightarrow \quad \boxed{C_2 = \frac{2B}{\rho}}$$
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│  Step 4: 2-Point Fitting                                    │
-│    Z₁ = Y₁/v₁,  Z₂ = Y₂/v₂                                  │
-│    B = (Z₁ - Z₂) / (v₁ - v₂)                                │
-│    A = Z₁ - B·v₁                                            │
+│  Step 4: 다중점 피팅 (1~3 m/s, 50개 점)                      │
+│    v_i ∈ [1.0, 3.0] m/s (균등 분포)                         │
+│    최소제곱법: X^T X [A B]^T = X^T Y                         │
+│    R² > 0.999 (피팅 품질 확인)                               │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -324,49 +345,81 @@ $$C_2 = \frac{2 \times 3.24}{1.2258} = 5.29 \text{ 1/m}$$
 
 ### 입력 → 출력 변환의 핵심 3단계
 
-**① Nir 경험식으로 압력강하 계산**
+**① Nir 경험식으로 압력강하 계산 (50개 점)**
 $$\frac{\Delta P}{L} = \frac{N \cdot f_N \cdot \rho \cdot v_{max}^2}{2L}$$
 
-**② 2-Point Fitting으로 계수 추출**
-$$A = \frac{Y_1}{v_1} - \frac{Y_1/v_1 - Y_2/v_2}{v_1 - v_2} \cdot v_1$$
-$$B = \frac{Y_1/v_1 - Y_2/v_2}{v_1 - v_2}$$
+**② 다중점 피팅으로 계수 추출 (최소제곱법)**
+$$\min_{A, B} \sum_{i=1}^{n} \left( Y_i - A \cdot v_i - B \cdot v_i^2 \right)^2$$
+
+해: $\mathbf{X}^T \mathbf{X} \begin{bmatrix} A \\ B \end{bmatrix} = \mathbf{X}^T \mathbf{Y}$
 
 **③ Porous 파라미터로 변환**
 $$\boxed{\frac{1}{K} = \frac{A}{\mu}} \quad \boxed{C_2 = \frac{2B}{\rho}}$$
+
+**④ 피팅 품질 확인**
+$$R^2 = 1 - \frac{\text{SS}_{res}}{\text{SS}_{tot}} > 0.999 \quad \text{(우수)}$$
 
 ---
 
 ## 11. 사용 방법
 
-### 11.1 코드 실행
+### 11.1 CLI 실행 방법
 
+**① 대화형 모드** (권장)
 ```bash
-python cfd_porous_calc.py
+python cfd_porous_calc.py --interactive
 ```
 
-실행하면 다음과 같은 결과를 얻을 수 있습니다:
-- 단일 케이스 상세 결과 (Fs=4mm, hf=4mm)
-- 여러 케이스 비교표
-- CFD 소프트웨어 입력 가이드
-- JSON 형식 출력
+**② 명령줄 인자 직접 입력**
+```bash
+python cfd_porous_calc.py --Fs 4.0 --hf 4.0 --T 15 --v 2.0
+```
 
-### 11.2 커스텀 계산
+**③ 고급 옵션**
+```bash
+python cfd_porous_calc.py --Fs 4.0 --hf 4.0 --T 15 --v 2.0 \
+    --v_min 1.0 --v_max 3.0 --n_points 100 --no-plot
+```
 
-Python 코드 내에서 직접 함수 호출:
+### 11.2 주요 옵션
+
+| 옵션 | 설명 | 기본값 |
+|------|------|--------|
+| `--Fs` | 핀 간격 [mm] | 필수 |
+| `--hf` | 핀 높이 [mm] | 필수 |
+| `--T` | 대기 온도 [°C] | 필수 |
+| `--v` | 설계 풍속 [m/s] | 필수 |
+| `--v_min` | 피팅 최소 속도 [m/s] | 1.0 |
+| `--v_max` | 피팅 최대 속도 [m/s] | 3.0 |
+| `--n_points` | 피팅 점 개수 | 50 |
+| `--interactive` | 대화형 입력 모드 | False |
+| `--no-plot` | 시각화 생성 안 함 | False |
+
+### 11.3 Python API 사용
 
 ```python
 from cfd_porous_calc import calculate_porous_parameters
 
 result = calculate_porous_parameters(
-    Fs_mm=4.0,      # 핀 간격 [mm]
-    hf_mm=4.0,      # 핀 높이 [mm]
-    T_celsius=15.0, # 온도 [°C]
-    v_design=2.0    # 설계 풍속 [m/s]
+    Fs_mm=4.0,               # 핀 간격 [mm]
+    hf_mm=4.0,               # 핀 높이 [mm]
+    T_celsius=15.0,          # 온도 [°C]
+    v_design=2.0,            # 설계 풍속 [m/s]
+    v_range=(1.0, 3.0),      # 피팅 속도 범위 [m/s]
+    n_points=50              # 피팅 점 개수
 )
 
 print(f"점성 저항 (1/K): {result['porous']['inv_K']:.4e} [1/m²]")
 print(f"관성 저항 (C2): {result['porous']['C2']:.4f} [1/m]")
+print(f"피팅 품질 (R²): {result['porous']['R_squared']:.6f}")
 ```
+
+### 11.4 출력 파일
+
+실행 후 다음 파일이 생성됩니다:
+
+- **`porous_fitting.png`**: 피팅 결과 시각화 (압력강하 vs 속도, 잔차 플롯)
+- **터미널 출력**: 계산 결과, JSON 형식 출력
 
 ---
 
@@ -415,4 +468,12 @@ print(f"관성 저항 (C2): {result['porous']['C2']:.4f} [1/m]")
 
 **작성자:** Claude (Anthropic)
 **최종 업데이트:** 2026-01-17
-**버전:** 2.0 (Nir 상관식 기반)
+**버전:** 3.0 (다중점 피팅 방식)
+
+## 15. 변경 이력
+
+| 버전 | 날짜 | 변경 내용 |
+|------|------|-----------|
+| 3.0 | 2026-01-17 | 다중점 피팅 방식 적용 (1~3 m/s, 50개 점), CLI 인터페이스 추가, matplotlib 시각화 추가 |
+| 2.0 | 2026-01-17 | Nir (1991) 상관식 기반으로 마이그레이션 (Wang 상관식 대체) |
+| 1.0 | 2025-XX-XX | 초기 버전 (Wang 상관식, 2-Point Fitting) |
