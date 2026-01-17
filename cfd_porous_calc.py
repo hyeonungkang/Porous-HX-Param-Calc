@@ -6,7 +6,7 @@ Annular Fin → Porous Media 파라미터 변환 계산기
 Nir (1991) 마찰계수 상관식을 사용하여 CFD Porous Media의
 점성 저항 계수(1/K)와 관성 저항 계수(C2)를 도출합니다.
 
-다중점 피팅 방식: 1~3 m/s 범위에서 여러 속도점을 계산하여
+다중점 피팅 방식: 0.5~3.5 m/s 범위에서 여러 속도점을 계산하여
 최소제곱법으로 Darcy-Forchheimer 계수를 정확하게 근사합니다.
 
 Reference:
@@ -241,7 +241,7 @@ def fit_darcy_forchheimer_multipoint(
     """
     다중점 피팅을 통한 Darcy-Forchheimer 계수 도출
 
-    1~3 m/s 범위에서 여러 속도점을 계산한 후,
+    0.5~3.5 m/s 범위에서 여러 속도점을 계산한 후,
     최소제곱법으로 ΔP/L = A×v + B×v² 형태로 피팅
 
     Parameters:
@@ -370,7 +370,7 @@ def calculate_porous_parameters(
     s1_mm: float = 55.333,  # 횡방향 피치 [mm]
     pitch_ratio: float = 1.0,# s1/s2 비율
     N: int = 4,             # 튜브 열 수
-    v_range: Tuple[float, float] = (1.0, 3.0),  # 피팅 속도 범위
+    v_range: Tuple[float, float] = (0.5, 3.5),  # 피팅 속도 범위
     n_points: int = 50      # 피팅 점 개수
 ) -> Dict:
     """
@@ -386,7 +386,7 @@ def calculate_porous_parameters(
         s1_mm: 횡방향 피치 [mm] (기본값: 55.333)
         pitch_ratio: s1/s2 비율 (기본값: 1.0)
         N: 튜브 열 수 (기본값: 4)
-        v_range: 피팅 속도 범위 [m/s] (기본값: 1~3)
+        v_range: 피팅 속도 범위 [m/s] (기본값: 0.5~3.5)
         n_points: 피팅 점 개수 (기본값: 50)
 
     Returns:
@@ -603,7 +603,7 @@ def get_cli_input():
     """
     print("\n" + "█" * 80)
     print("  Nir (1991) 상관식 기반 Annular Fin Porous 파라미터 계산기")
-    print("  다중점 피팅 방식 (1~3 m/s 범위)")
+    print("  다중점 피팅 방식 (0.5~3.5 m/s 범위)")
     print("█" * 80)
     print()
 
@@ -629,11 +629,11 @@ def get_cli_input():
         N_str = input(f"튜브 열 수 (기본값: 4): ")
         N = int(N_str) if N_str.strip() else 4
 
-        v_min_str = input(f"피팅 최소 속도 [m/s] (기본값: 1.0): ")
-        v_min = float(v_min_str) if v_min_str.strip() else 1.0
+        v_min_str = input(f"피팅 최소 속도 [m/s] (기본값: 0.5): ")
+        v_min = float(v_min_str) if v_min_str.strip() else 0.5
 
-        v_max_str = input(f"피팅 최대 속도 [m/s] (기본값: 3.0): ")
-        v_max = float(v_max_str) if v_max_str.strip() else 3.0
+        v_max_str = input(f"피팅 최대 속도 [m/s] (기본값: 3.5): ")
+        v_max = float(v_max_str) if v_max_str.strip() else 3.5
 
         n_points_str = input(f"피팅 점 개수 (기본값: 50): ")
         n_points = int(n_points_str) if n_points_str.strip() else 50
@@ -685,8 +685,8 @@ if __name__ == "__main__":
     parser.add_argument('--s1', type=float, default=55.333, help='횡방향 피치 [mm] (기본: 55.333)')
     parser.add_argument('--pitch_ratio', type=float, default=1.0, help='s1/s2 비율 (기본: 1.0)')
     parser.add_argument('--N', type=int, default=4, help='튜브 열 수 (기본: 4)')
-    parser.add_argument('--v_min', type=float, default=1.0, help='피팅 최소 속도 [m/s] (기본: 1.0)')
-    parser.add_argument('--v_max', type=float, default=3.0, help='피팅 최대 속도 [m/s] (기본: 3.0)')
+    parser.add_argument('--v_min', type=float, default=0.5, help='피팅 최소 속도 [m/s] (기본: 0.5)')
+    parser.add_argument('--v_max', type=float, default=3.5, help='피팅 최대 속도 [m/s] (기본: 3.5)')
     parser.add_argument('--n_points', type=int, default=50, help='피팅 점 개수 (기본: 50)')
     parser.add_argument('--interactive', '-i', action='store_true', help='대화형 입력 모드')
     parser.add_argument('--no-plot', action='store_true', help='시각화 생성 안 함')
