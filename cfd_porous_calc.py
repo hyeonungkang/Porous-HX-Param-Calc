@@ -480,49 +480,80 @@ def calculate_porous_parameters(
 # 7. 시각화 함수
 # =============================================================================
 
-def plot_fitting_results(result: Dict, save_path: str = 'porous_fitting.png'):
+def plot_fitting_results(result: Dict, save_path: str = None):
     """
     피팅 결과를 시각화
 
     Parameters:
         result: calculate_porous_parameters의 반환값
-        save_path: 이미지 저장 경로
+        save_path: 이미지 저장 경로 (None이면 자동 생성)
     """
     if not HAS_MATPLOTLIB:
-        print("matplotlib이 설치되지 않아 시각화를 건너뜁니다.")
+        print("matplotlib not available. Skipping visualization.")
         return
+
+    # 파일명 자동 생성 (설계변수 기반)
+    if save_path is None:
+        inp = result['input']
+        save_path = f"Fs{inp['Fs_mm']:.1f}_hf{inp['hf_mm']:.1f}_T{inp['T_celsius']:.1f}_v{inp['v_design']:.2f}.png"
 
     v_points = result['fitting']['v_points']
     Y_points = result['fitting']['Y_points']
     Y_fit = result['fitting']['Y_fit']
     R_squared = result['porous']['R_squared']
+    inv_K = result['porous']['inv_K']
+    C2 = result['porous']['C2']
+    K = result['porous']['K']
 
     # Figure 생성
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 6))
 
     # 왼쪽: 압력강하 vs 속도
     ax1.scatter(v_points, Y_points, color='blue', s=50, alpha=0.6,
-                label='Nir Correlation (계산점)', zorder=3)
+                label='Nir Correlation (Calculated)', zorder=3)
     ax1.plot(v_points, Y_fit, 'r-', linewidth=2,
              label=f'Darcy-Forchheimer Fit (R²={R_squared:.6f})', zorder=2)
-    ax1.set_xlabel('Velocity [m/s]', fontsize=12)
-    ax1.set_ylabel('Pressure Drop per Length [Pa/m]', fontsize=12)
-    ax1.set_title('Pressure Drop Fitting', fontsize=14, fontweight='bold')
+    ax1.set_xlabel('Velocity [m/s]', fontsize=13)
+    ax1.set_ylabel('Pressure Drop per Length [Pa/m]', fontsize=13)
+    ax1.set_title('Pressure Drop Fitting', fontsize=15, fontweight='bold')
     ax1.grid(True, alpha=0.3)
-    ax1.legend(fontsize=10)
+    ax1.legend(fontsize=11, loc='upper left')
+
+    # CFD 파라미터 텍스트 박스 추가
+    textstr = '\n'.join((
+        r'$\bf{CFD\ Porous\ Parameters:}$',
+        f'1/K = {inv_K:.4e} [1/m²]',
+        f'C₂ = {C2:.4f} [1/m]',
+        f'K = {K:.4e} [m²]'
+    ))
+    props = dict(boxstyle='round', facecolor='wheat', alpha=0.8)
+    ax1.text(0.98, 0.02, textstr, transform=ax1.transAxes, fontsize=11,
+             verticalalignment='bottom', horizontalalignment='right', bbox=props)
 
     # 오른쪽: 잔차 플롯
     residuals = Y_points - Y_fit
     ax2.scatter(v_points, residuals, color='green', s=50, alpha=0.6)
     ax2.axhline(y=0, color='r', linestyle='--', linewidth=2)
-    ax2.set_xlabel('Velocity [m/s]', fontsize=12)
-    ax2.set_ylabel('Residuals [Pa/m]', fontsize=12)
-    ax2.set_title('Fitting Residuals', fontsize=14, fontweight='bold')
+    ax2.set_xlabel('Velocity [m/s]', fontsize=13)
+    ax2.set_ylabel('Residuals [Pa/m]', fontsize=13)
+    ax2.set_title('Fitting Residuals', fontsize=15, fontweight='bold')
     ax2.grid(True, alpha=0.3)
+
+    # 잔차 통계 추가
+    residual_std = np.std(residuals)
+    residual_mean = np.mean(residuals)
+    textstr2 = '\n'.join((
+        r'$\bf{Residual\ Statistics:}$',
+        f'Mean = {residual_mean:.4f} Pa/m',
+        f'Std Dev = {residual_std:.4f} Pa/m'
+    ))
+    props2 = dict(boxstyle='round', facecolor='lightgreen', alpha=0.8)
+    ax2.text(0.98, 0.98, textstr2, transform=ax2.transAxes, fontsize=11,
+             verticalalignment='top', horizontalalignment='right', bbox=props2)
 
     plt.tight_layout()
     plt.savefig(save_path, dpi=150, bbox_inches='tight')
-    print(f"\n✓ 시각화 저장: {save_path}")
+    print(f"\n✓ Visualization saved: {save_path}")
 
 
 # =============================================================================
