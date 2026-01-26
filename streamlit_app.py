@@ -82,28 +82,63 @@ from annular finned tube geometry using the **Nir (1991)** correlation with **mu
 st.sidebar.header("📝 Input Parameters")
 
 st.sidebar.subheader("Primary Design Parameters")
-Fs_mm = st.sidebar.slider(
-    "Fin Spacing (Fs) [mm]",
-    min_value=0.5, max_value=30.0, value=4.0, step=0.01,
-    help="Distance between adjacent fins (typical: 1-15mm)"
+
+# Helper function to create synced number input and slider
+def synced_input(label, min_val, max_val, default_val, key, help_text):
+    if key not in st.session_state:
+        st.session_state[key] = default_val
+    
+    # Define update functions to sync both widgets
+    def update_slider():
+        st.session_state[f"{key}_slider"] = st.session_state[f"{key}_num"]
+        st.session_state[key] = st.session_state[f"{key}_num"]
+
+    def update_num():
+        st.session_state[f"{key}_num"] = st.session_state[f"{key}_slider"]
+        st.session_state[key] = st.session_state[f"{key}_slider"]
+
+    # Number input for precise typing
+    st.sidebar.number_input(
+        label,
+        min_value=min_val, max_value=max_val,
+        value=st.session_state[key],
+        step=0.01,
+        key=f"{key}_num",
+        on_change=update_slider,
+        help=help_text
+    )
+    
+    # Slider for quick scrolling
+    st.sidebar.slider(
+        f"{label} (Slider)",
+        min_value=min_val, max_value=max_val,
+        value=st.session_state[key],
+        step=0.01,
+        key=f"{key}_slider",
+        on_change=update_num,
+        label_visibility="collapsed" # Hide slider label for cleaner look
+    )
+    
+    return st.session_state[key]
+
+Fs_mm = synced_input(
+    "Fin Spacing (Fs) [mm]", 0.5, 30.0, 4.0, "fs_val",
+    "Distance between adjacent fins (typical: 1-15mm)"
 )
 
-hf_mm = st.sidebar.slider(
-    "Fin Height (hf) [mm]",
-    min_value=0.5, max_value=50.0, value=4.0, step=0.01,
-    help="Radial height of the fin (typical: 3-20mm)"
+hf_mm = synced_input(
+    "Fin Height (hf) [mm]", 0.5, 50.0, 4.0, "hf_val",
+    "Radial height of the fin (typical: 3-20mm)"
 )
 
-T_celsius = st.sidebar.slider(
-    "Air Temperature [°C]",
-    min_value=-50.0, max_value=100.0, value=14.8, step=0.01,
-    help="Ambient air temperature (typical: -40 to 60°C)"
+T_celsius = synced_input(
+    "Air Temperature [°C]", -50.0, 100.0, 14.8, "T_val",
+    "Ambient air temperature (typical: -40 to 60°C)"
 )
 
-v_design = st.sidebar.slider(
-    "Design Velocity [m/s]",
-    min_value=0.1, max_value=20.0, value=2.0, step=0.01,
-    help="Design inlet superficial velocity (typical: 0.5-10 m/s)"
+v_design = synced_input(
+    "Design Velocity [m/s]", 0.1, 20.0, 2.0, "v_val",
+    "Design inlet superficial velocity (typical: 0.5-10 m/s)"
 )
 
 st.sidebar.subheader("Advanced Parameters")

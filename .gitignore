@@ -2,3 +2,10 @@
 *.txt
 __pycache__/
 *.pyc
+
+# Virtual Environment
+.venv/
+venv/
+ENV/
+env/
+
