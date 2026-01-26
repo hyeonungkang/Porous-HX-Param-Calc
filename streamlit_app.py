@@ -84,25 +84,25 @@ st.sidebar.header("📝 Input Parameters")
 st.sidebar.subheader("Primary Design Parameters")
 Fs_mm = st.sidebar.slider(
     "Fin Spacing (Fs) [mm]",
-    min_value=1.0, max_value=10.0, value=4.0, step=0.5,
+    min_value=0.0, max_value=100.0, value=4.0, step=0.01,
     help="Distance between adjacent fins"
 )
 
 hf_mm = st.sidebar.slider(
     "Fin Height (hf) [mm]",
-    min_value=1.0, max_value=10.0, value=4.0, step=0.5,
+    min_value=0.0, max_value=100.0, value=4.0, step=0.01,
     help="Radial height of the fin"
 )
 
 T_celsius = st.sidebar.slider(
     "Air Temperature [°C]",
-    min_value=-20.0, max_value=50.0, value=14.8, step=0.1,
+    min_value=-100.0, max_value=100.0, value=14.8, step=0.01,
     help="Ambient air temperature"
 )
 
 v_design = st.sidebar.slider(
     "Design Velocity [m/s]",
-    min_value=0.5, max_value=5.0, value=2.0, step=0.1,
+    min_value=0.0, max_value=100.0, value=2.0, step=0.01,
     help="Design inlet superficial velocity"
 )
 
@@ -110,43 +110,43 @@ st.sidebar.subheader("Advanced Parameters")
 with st.sidebar.expander("Tube and Pitch Parameters"):
     Dc_mm = st.number_input(
         "Tube Outer Diameter (Dc) [mm]",
-        min_value=10.0, max_value=50.0, value=24.0, step=1.0
+        min_value=0.0, max_value=100.0, value=24.0, step=0.01
     )
 
     s1_mm = st.number_input(
         "Transverse Pitch (s1) [mm]",
-        min_value=30.0, max_value=100.0, value=55.333, step=0.1
+        min_value=0.0, max_value=100.0, value=55.333, step=0.01
     )
 
     delta_f_mm = st.number_input(
         "Fin Thickness (δf) [mm]",
-        min_value=0.1, max_value=2.0, value=0.5, step=0.1
+        min_value=0.0, max_value=100.0, value=0.5, step=0.01
     )
 
     pitch_ratio = st.number_input(
         "Pitch Ratio (s1/s2)",
-        min_value=0.5, max_value=2.0, value=1.0, step=0.1
+        min_value=0.0, max_value=100.0, value=1.0, step=0.01
     )
 
     N = st.number_input(
         "Number of Tube Rows (N)",
-        min_value=1, max_value=10, value=4, step=1
+        min_value=1, max_value=100, value=4, step=1
     )
 
 with st.sidebar.expander("Fitting Parameters"):
     v_min = st.number_input(
         "Minimum Velocity [m/s]",
-        min_value=0.1, max_value=2.0, value=0.5, step=0.1
+        min_value=0.0, max_value=100.0, value=0.5, step=0.01
     )
 
     v_max = st.number_input(
         "Maximum Velocity [m/s]",
-        min_value=2.0, max_value=10.0, value=3.5, step=0.1
+        min_value=0.0, max_value=100.0, value=3.5, step=0.01
     )
 
     n_points = st.number_input(
         "Number of Fitting Points",
-        min_value=10, max_value=200, value=50, step=10
+        min_value=1, max_value=1000, value=50, step=1
     )
 
 # Calculate button
