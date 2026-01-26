@@ -84,69 +84,77 @@ st.sidebar.header("📝 Input Parameters")
 st.sidebar.subheader("Primary Design Parameters")
 Fs_mm = st.sidebar.slider(
     "Fin Spacing (Fs) [mm]",
-    min_value=0.0, max_value=100.0, value=4.0, step=0.01,
-    help="Distance between adjacent fins"
+    min_value=0.5, max_value=30.0, value=4.0, step=0.01,
+    help="Distance between adjacent fins (typical: 1-15mm)"
 )
 
 hf_mm = st.sidebar.slider(
     "Fin Height (hf) [mm]",
-    min_value=0.0, max_value=100.0, value=4.0, step=0.01,
-    help="Radial height of the fin"
+    min_value=0.5, max_value=50.0, value=4.0, step=0.01,
+    help="Radial height of the fin (typical: 3-20mm)"
 )
 
 T_celsius = st.sidebar.slider(
     "Air Temperature [°C]",
-    min_value=-100.0, max_value=100.0, value=14.8, step=0.01,
-    help="Ambient air temperature"
+    min_value=-50.0, max_value=100.0, value=14.8, step=0.01,
+    help="Ambient air temperature (typical: -40 to 60°C)"
 )
 
 v_design = st.sidebar.slider(
     "Design Velocity [m/s]",
-    min_value=0.0, max_value=100.0, value=2.0, step=0.01,
-    help="Design inlet superficial velocity"
+    min_value=0.1, max_value=20.0, value=2.0, step=0.01,
+    help="Design inlet superficial velocity (typical: 0.5-10 m/s)"
 )
 
 st.sidebar.subheader("Advanced Parameters")
 with st.sidebar.expander("Tube and Pitch Parameters"):
     Dc_mm = st.number_input(
         "Tube Outer Diameter (Dc) [mm]",
-        min_value=0.0, max_value=100.0, value=24.0, step=0.01
+        min_value=5.0, max_value=100.0, value=24.0, step=0.01,
+        help="Typical: 10-50mm"
     )
 
     s1_mm = st.number_input(
         "Transverse Pitch (s1) [mm]",
-        min_value=0.0, max_value=100.0, value=55.333, step=0.01
+        min_value=10.0, max_value=300.0, value=55.333, step=0.01,
+        help="Must be > tube outer diameter + 2×fin height"
     )
 
     delta_f_mm = st.number_input(
         "Fin Thickness (δf) [mm]",
-        min_value=0.0, max_value=100.0, value=0.5, step=0.01
+        min_value=0.05, max_value=5.0, value=0.5, step=0.01,
+        help="Typical: 0.1-2mm"
     )
 
     pitch_ratio = st.number_input(
         "Pitch Ratio (s1/s2)",
-        min_value=0.0, max_value=100.0, value=1.0, step=0.01
+        min_value=0.1, max_value=10.0, value=1.0, step=0.01,
+        help="Ratio of transverse to longitudinal pitch"
     )
 
     N = st.number_input(
         "Number of Tube Rows (N)",
-        min_value=1, max_value=100, value=4, step=1
+        min_value=1, max_value=50, value=4, step=1,
+        help="Typical: 1-20 rows"
     )
 
 with st.sidebar.expander("Fitting Parameters"):
     v_min = st.number_input(
         "Minimum Velocity [m/s]",
-        min_value=0.0, max_value=100.0, value=0.5, step=0.01
+        min_value=0.01, max_value=30.0, value=0.5, step=0.01,
+        help="Lower bound for curve fitting"
     )
 
     v_max = st.number_input(
         "Maximum Velocity [m/s]",
-        min_value=0.0, max_value=100.0, value=3.5, step=0.01
+        min_value=0.1, max_value=30.0, value=3.5, step=0.01,
+        help="Upper bound for curve fitting"
     )
 
     n_points = st.number_input(
         "Number of Fitting Points",
-        min_value=1, max_value=1000, value=50, step=1
+        min_value=5, max_value=500, value=50, step=1,
+        help="More points = higher accuracy but slower"
     )
 
 # Calculate button
